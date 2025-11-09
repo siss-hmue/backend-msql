@@ -1,0 +1,96 @@
+name: NPM Security Audit
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    # Run weekly on Monday at 9am UTC
+    - cron: '0 9 * * 1'
+
+jobs:
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: |
+          echo "🔍 Running npm audit..."
+          
+          # Run audit and save to JSON
+          npm audit --json > audit-report.json || true
+          
+          # Check if audit report exists and has content
+          if [ -s audit-report.json ]; then
+            echo "📊 Vulnerability Summary:"
+            echo "================================"
+            
+            # Extract vulnerability counts
+            CRITICAL=$(cat audit-report.json | jq -r '.metadata.vulnerabilities.critical // 0')
+            HIGH=$(cat audit-report.json | jq -r '.metadata.vulnerabilities.high // 0')
+            MODERATE=$(cat audit-report.json | jq -r '.metadata.vulnerabilities.moderate // 0')
+            LOW=$(cat audit-report.json | jq -r '.metadata.vulnerabilities.low // 0')
+            
+            echo "Critical: $CRITICAL"
+            echo "High: $HIGH"
+            echo "Moderate: $MODERATE"
+            echo "Low: $LOW"
+            echo "================================"
+            
+            # Fail if critical or high vulnerabilities found
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "❌ CRITICAL severity vulnerabilities found!"
+              npm audit --audit-level=critical
+              exit 1
+            fi
+            
+            if [ "$HIGH" -gt 0 ]; then
+              echo "❌ HIGH severity vulnerabilities found!"
+              npm audit --audit-level=high
+              exit 1
+            fi
+            
+            if [ "$MODERATE" -gt 0 ]; then
+              echo "⚠️ MODERATE severity vulnerabilities found (not blocking)"
+              npm audit --audit-level=moderate
+            fi
+            
+            echo "✅ No critical or high severity vulnerabilities found"
+          else
+            echo "✅ No vulnerabilities detected"
+          fi
+      
+      - name: Check for outdated packages
+        if: github.event_name == 'schedule'
+        run: |
+          echo "🔍 Checking for outdated dependencies..."
+          npm outdated || echo "⚠️ Some dependencies are outdated - consider updating"
+      
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: audit-report.json
+          retention-days: 30
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "================================"
+          echo "📦 NPM Security Audit Complete"
+          echo "================================"

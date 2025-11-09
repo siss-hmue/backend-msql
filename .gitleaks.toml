@@ -1,0 +1,11 @@
+[allowlist]
+description = "Allowlist for documentation examples"
+paths = [
+  '''README\.md'''
+]
+
+# Or allowlist specific fingerprints
+regexes = [
+  '''cafebabe:deadbeef''',
+  '''AKIAIMNOJVGFDXXXE4OA'''
+]
